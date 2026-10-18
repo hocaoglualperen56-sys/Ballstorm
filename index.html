@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#080d1d">
+<title>Ballstorm — Neon Brick Breaker</title>
+<style>
+:root{color-scheme:dark;--bg:#080d1d;--panel:#121a30;--line:#273454;--cyan:#45e8ff;--pink:#ff4da6;--gold:#ffd166}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#f4f7ff;touch-action:manipulation}
+body{display:flex;justify-content:center;align-items:stretch;background:radial-gradient(ellipse at 50% -15%,#1a2c57 0,transparent 60%),var(--bg)}
+#app{width:min(100%,540px);height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom);position:relative}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 2px 8px;gap:8px}
+.brand{font-size:clamp(19px,5vw,25px);font-weight:1000;letter-spacing:1.4px;background:linear-gradient(100deg,#fff,#45e8ff 55%,#b9a0ff);background-clip:text;color:transparent}
+.stats{display:flex;gap:7px}.stat{background:#111a2f;border:1px solid var(--line);border-radius:12px;padding:6px 10px;min-width:64px;text-align:center}.stat small{display:block;color:#8fa0c6;font-size:10px;letter-spacing:1px}.stat strong{font-size:16px;font-variant-numeric:tabular-nums}
+#board{position:relative;flex:1;min-height:0;border:1px solid #27395f;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,rgba(15,25,51,.86),rgba(6,11,26,.98));box-shadow:0 0 36px #17264a66,inset 0 0 28px #20365a22}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+.bottom{padding:10px 2px 12px;display:flex;gap:8px;align-items:center}
+button{font:inherit;font-weight:800;border:1px solid #344566;color:#f6f8ff;background:linear-gradient(180deg,#1a2746,#111a30);border-radius:13px;padding:11px 13px;cursor:pointer;box-shadow:0 4px 0 #080d19;transition:transform .1s,border-color .15s}
+button:active{transform:translateY(2px);box-shadow:0 2px 0 #080d19}button.primary{background:linear-gradient(110deg,#27cde8,#6478ff);border:0;color:#061020;flex:1}button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.hint{font-size:11px;color:#9eacd0;text-align:center;line-height:1.4;flex:1}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:22px;background:#050916d9;backdrop-filter:blur(9px);z-index:5}
+.overlay.hidden{display:none}.modal{width:min(100%,360px);padding:24px 20px;border:1px solid #35466d;border-radius:23px;background:linear-gradient(145deg,#172440,#0b1124);box-shadow:0 22px 80px #0009;text-align:center}
+.modal h1{margin:0 0 8px;font-size:29px;letter-spacing:1px}.modal p{color:#aebcda;font-size:13px;line-height:1.55}.modal button{width:100%;margin-top:9px}.modal .sub{background:transparent;box-shadow:none}
+.skinlist{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:15px}.skin{padding:12px 5px;border-radius:13px;border:1px solid #2d3d60;background:#0b1225;font-size:12px}.skin.selected{border-color:var(--cyan);box-shadow:inset 0 0 0 1px var(--cyan)}.orb{display:block;width:25px;height:25px;border-radius:50%;margin:0 auto 8px;box-shadow:0 0 16px currentColor}
+#toast{position:absolute;top:75px;left:50%;transform:translateX(-50%);background:#152340;border:1px solid #3b527d;border-radius:20px;padding:9px 14px;font-size:12px;font-weight:800;z-index:8;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap}
+#toast.show{opacity:1}
+@media(min-height:850px){header{padding-top:16px;padding-bottom:12px}.bottom{padding-top:14px;padding-bottom:18px}}
+</style>
+</head>
+<body>
+<div id="app">
+<header><div class="brand">✦ BALLSTORM</div><div class="stats"><div class="stat"><small>LEVEL</small><strong id="level">1</strong></div><div class="stat"><small>SCORE</small><strong id="score">0</strong></div><div class="stat"><small>🪙 COINS</small><strong id="coins">0</strong></div></div></header>
+<div id="board"><canvas id="game" aria-label="Ballstorm oyun alanı"></canvas>
+<div id="start" class="overlay"><div class="modal"><div style="font-size:46px;margin-bottom:6px">◉</div><h1>BALLSTORM</h1><p>Neon blokları parçala, toplarını çoğalt ve rekorunu kır!<br><b>Dokunup sürükle</b>, nişan al ve bırak.</p><button id="play" class="primary">OYUNA BAŞLA ↗</button><button id="openSkins" class="sub">✦ TOP GÖRÜNÜMLERİ</button><p style="font-size:10px;margin-bottom:0">İlerleme bu cihazda saklanır.</p></div></div>
+<div id="gameover" class="overlay hidden"><div class="modal"><div style="font-size:42px">⚡</div><h1>OYUN BİTTİ</h1><p>Bu turda <b id="finalScore">0</b> puan yaptın.<br>Bir sonraki denemede daha ileri git!</p><button id="retry" class="primary">TEKRAR OYNA</button><button id="overSkins" class="sub">TOP GÖRÜNÜMLERİ</button></div></div>
+<div id="skins" class="overlay hidden"><div class="modal"><h1>TOP GÖRÜNÜMLERİ</h1><p>Yeni görünümleri oyun içi jetonlarla aç.</p><div id="skinlist" class="skinlist"></div><button id="closeSkins" class="primary">TAMAM</button></div></div>
+</div>
+<div class="bottom"><button id="pause">Ⅱ Duraklat</button><div class="hint" id="hint">Nişan almak için sürükle · Bırakınca ateş et</div><button id="sound">♪ Ses: Kapalı</button></div>
+<div id="toast"></div>
+</div>
+<script>
+(()=>{
+'use strict';
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+const skins=[
+{name:'Neon',color:'#45e8ff',price:0},
+{name:'Plazma',color:'#ff4da6',price:35},
+{name:'Altın',color:'#ffd166',price:75},
+{name:'Mor Sis',color:'#b69cff',price:120},
+{name:'Zehir',color:'#78ff9d',price:180},
+{name:'Alev',color:'#ff784f',price:250}
+];
+let W=360,H=600,dpr=1,playing=false,paused=false,aiming=false,gameOver=false;
+let balls=[],blocks=[],particles=[],drops=[],score=0,level=1,coins=Number(localStorage.getItem('bs-coins')||0),best=Number(localStorage.getItem('bs-best')||0),unlocked=JSON.parse(localStorage.getItem('bs-skins')||'[0]'),skin=Number(localStorage.getItem('bs-skin')||0);
+let launchX=0,launchY=0,aimX=0,aimY=0,shotsLeft=0,ballsReturning=0,roundActive=false,shake=0;
+const rand=(a,b)=>a+Math.random()*(b-a), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function resize(){const r=canvas.getBoundingClientRect();dpr=Math.min(window.devicePixelRatio||1,2);W=Math.max(1,r.width);H=Math.max(1,r.height);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);launchX=W/2;launchY=H-32;if(!balls.length)draw()}
+new ResizeObserver(resize).observe(canvas);
+function save(){localStorage.setItem('bs-coins',coins);localStorage.setItem('bs-best',best);localStorage.setItem('bs-skins',JSON.stringify(unlocked));localStorage.setItem('bs-skin',skin)}
+function stats(){$('level').textContent=level;$('score').textContent=score.toLocaleString('tr-TR');$('coins').textContent=coins.toLocaleString('tr-TR')}
+function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),1500)}
+function hideAll(){$('start').classList.add('hidden');$('gameover').classList.add('hidden');$('skins').classList.add('hidden')}
+function newGame(){score=0;level=1;balls=[];blocks=[];particles=[];drops=[];gameOver=false;paused=false;playing=true;roundActive=false;launchX=W/2;launchY=H-32;spawnRow(true);stats();hideAll();$('pause').textContent='Ⅱ Duraklat';$('hint').textContent='Nişan almak için sürükle · Bırakınca ateş et'}
+function spawnRow(first=false){
+ if(!first && blocks.some(b=>b.y<launchY-58)){endGame();return}
+ const cols=Math.max(5,Math.min(8,Math.floor(W/49))),gap=5,margin=10,cw=(W-margin*2-gap*(cols-1))/cols;
+ for(let c=0;c<cols;c++){
+  if(Math.random()<.19 && !first)continue;
+  const value=Math.max(1,Math.floor(rand(1,level*1.25+3)));
+  blocks.push({x:margin+c*(cw+gap),y:22,w:cw,h:Math.max(27,Math.min(39,cw*.72)),hp:value,max:value,color:Math.random(),coin:Math.random()<.13});
+ }
+ if(first && blocks.length===0)spawnRow(true);
+}
+function nextRound(){level++;blocks.forEach(b=>b.y+=b.h+7);drops.forEach(d=>d.y+=25);spawnRow();stats();toast('SEVİYE '+level+' · BLOKLAR GÜÇLENDİ')}
+function endGame(){playing=false;gameOver=true;best=Math.max(best,score);save();$('finalScore').textContent=score.toLocaleString('tr-TR');$('gameover').classList.remove('hidden');$('pause').textContent='Ⅱ Duraklat'}
+function burst(x,y,color,n=7){for(let i=0;i<n;i++)particles.push({x,y,vx:rand(-2.7,2.7),vy:rand(-3,2),life:rand(18,36),max:36,r:rand(1.5,3.5),color})}
+function circleRect(b,x,y,r){const nx=clamp(x,b.x,b.x+b.w),ny=clamp(y,b.y,b.y+b.h);const dx=x-nx,dy=y-ny;return dx*dx+dy*dy<r*r}
+function hitBlock(b){b.hp--;score+=1;if(b.hp<=0){score+=Math.max(1,b.max)*2;burst(b.x+b.w/2,b.y+b.h/2,['#45e8ff','#ff4da6','#ffd166','#a78bfa'][Math.floor(b.color*4)],12);if(b.coin)drops.push({x:b.x+b.w/2,y:b.y+b.h/2,r:7});return true}burst(b.x+b.w/2,b.y+b.h/2,'#d9f7ff',3);return false}
+function launch(){if(!playing||paused||roundActive||aimY>launchY-16)return;let dx=aimX-launchX,dy=aimY-launchY;const len=Math.hypot(dx,dy);if(len<20)return;dx/=len;dy/=len;if(dy>-.22)dy=-.22;const l=Math.hypot(dx,dy);dx/=l;dy/=l;shotsLeft=unlocked.length>2?Math.min(6,1+Math.floor((level-1)/4)):1;shotsLeft=1+Math.floor((level-1)/3);shotsLeft=Math.min(shotsLeft,8);ballsReturning=0;roundActive=true;const count=1+Math.floor((level-1)/3);for(let i=0;i<count;i++)balls.push({x:launchX,y:launchY,vx:dx*4.5,vy:dy*4.5,r:5.2,delay:i*5,active:false,stuck:false});aiming=false;$('hint').textContent='Toplar blokları kırıyor…'}
+function update(){
+ if(!playing||paused)return;
+ if(shake>0)shake--;
+ for(let i=balls.length-1;i>=0;i--){const b=balls[i];if(b.delay>0){b.delay--;continue}b.active=true;
+ b.x+=b.vx;b.y+=b.vy;
+ if(b.x<b.r){b.x=b.r;b.vx=Math.abs(b.vx)}if(b.x>W-b.r){b.x=W-b.r;b.vx=-Math.abs(b.vx)}
+ if(b.y<b.r){b.y=b.r;b.vy=Math.abs(b.vy)}
+ if(b.y>=launchY){b.y=launchY;ballsReturning++;balls.splice(i,1);continue}
+ let hit=false;
+ for(let j=blocks.length-1;j>=0;j--){const bl=blocks[j];if(circleRect(bl,b.x,b.y,b.r)){const oldx=b.x-b.vx,oldy=b.y-b.vy;if(oldx+b.r<=bl.x||oldx-b.r>=bl.x+bl.w)b.vx*=-1;else b.vy*=-1;if(hitBlock(bl)){blocks.splice(j,1)}hit=true;shake=2;break}}
+ }
+ for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.y+=1.7;if(d.y>=launchY-4){coins++;save();drops.splice(i,1);stats();toast('+1 JETON')}else if(d.y>H){drops.splice(i,1)}}
+ for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.035;p.life--;if(p.life<=0)particles.splice(i,1)}
+ if(roundActive&&balls.length===0){roundActive=false;launchX=clamp(launchX,12,W-12);launchY=H-32;stats();if(blocks.length===0){nextRound()}else{blocks.forEach(b=>b.y+=b.h+5);if(blocks.some(b=>b.y+b.h>=launchY-10)){endGame()}else{spawnRow();if(blocks.some(b=>b.y+b.h>=launchY-10))endGame()}}if(playing)$('hint').textContent='Yeni sıra geldi · Nişan al ve bırak'}
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ const grd=ctx.createLinearGradient(0,0,0,H);grd.addColorStop(0,'#101b36');grd.addColorStop(1,'#070c1c');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+ ctx.save();if(shake)ctx.translate(rand(-shake,shake),rand(-shake,shake));
+ ctx.strokeStyle='#8aa4e0';ctx.globalAlpha=.07;ctx.lineWidth=1;
+ for(let x=0;x<W;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}ctx.globalAlpha=1;
+ blocks.forEach(b=>{const colors=['#3ce0f6','#ff4f9e','#a78bfa','#ffb84d'];const col=colors[Math.floor(b.color*colors.length)];ctx.shadowColor=col;ctx.shadowBlur=9;const g=ctx.createLinearGradient(b.x,b.y,b.x,b.y+b.h);g.addColorStop(0,col);g.addColorStop(1,shade(col));ctx.fillStyle=g;roundRect(b.x,b.y,b.w,b.h,7);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#ffffff44';ctx.stroke();ctx.fillStyle='#061023';ctx.font='900 '+Math.min(18,b.h*.48)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(b.hp,b.x+b.w/2,b.y+b.h/2+1);if(b.coin){ctx.fillStyle='#fff1ad';ctx.beginPath();ctx.arc(b.x+b.w-5,b.y+5,3,0,Math.PI*2);ctx.fill()}});
+ drops.forEach(d=>{ctx.save();ctx.shadowColor='#ffd166';ctx.shadowBlur=14;ctx.fillStyle='#ffd166';ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff5bf';ctx.beginPath();ctx.arc(d.x-2,d.y-2,2,0,Math.PI*2);ctx.fill();ctx.restore()});
+ particles.forEach(p=>{ctx.globalAlpha=p.life/p.max;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill()});ctx.globalAlpha=1;
+ balls.forEach(b=>{ctx.save();ctx.shadowColor=skins[skin].color;ctx.shadowBlur=16;const g=ctx.createRadialGradient(b.x-2,b.y-2,1,b.x,b.y,b.r+3);g.addColorStop(0,'#fff');g.addColorStop(.38,skins[skin].color);g.addColorStop(1,'#fff0');ctx.fillStyle=g;ctx.beginPath();ctx.arc(b.x,b.y,b.r+2,0,Math.PI*2);ctx.fill();ctx.restore()});
+ if(aiming&&playing&&!paused&&!roundActive){let dx=aimX-launchX,dy=aimY-launchY;const len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;if(dy>-.22)dy=-.22;ctx.setLineDash([5,6]);ctx.strokeStyle=skins[skin].color;ctx.globalAlpha=.8;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(launchX,launchY);ctx.lineTo(launchX+dx*120,launchY+dy*120);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1}
+ ctx.strokeStyle='#ffffff16';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,launchY+13);ctx.lineTo(W,launchY+13);ctx.stroke();
+ if(!roundActive){ctx.save();ctx.shadowColor=skins[skin].color;ctx.shadowBlur=15;ctx.fillStyle=skins[skin].color;ctx.beginPath();ctx.arc(launchX,launchY,6,0,Math.PI*2);ctx.fill();ctx.restore()}
+ ctx.restore();
+}
+function shade(hex){const n=parseInt(hex.slice(1),16);return '#'+[n>>16&255,n>>8&255,n&255].map(v=>Math.max(0,Math.floor(v*.58)).toString(16).padStart(2,'0')).join('')}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function frame(){update();draw();requestAnimationFrame(frame)}
+function pointer(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+canvas.addEventListener('pointerdown',e=>{if(!playing||paused||roundActive)return;const p=pointer(e);if(p.y<launchY-5){aiming=true;aimX=p.x;aimY=p.y;canvas.setPointerCapture(e.pointerId)}});
+canvas.addEventListener('pointermove',e=>{if(aiming){const p=pointer(e);aimX=p.x;aimY=Math.min(p.y,launchY-18)}});
+canvas.addEventListener('pointerup',e=>{if(aiming){const p=pointer(e);aimX=p.x;aimY=Math.min(p.y,launchY-18);launch()}});
+canvas.addEventListener('pointercancel',()=>aiming=false);
+$('play').onclick=newGame;$('retry').onclick=newGame;
+$('pause').onclick=()=>{if(!playing||gameOver)return;paused=!paused;$('pause').textContent=paused?'▶ Devam':'Ⅱ Duraklat';$('hint').textContent=paused?'Oyun duraklatıldı':'Nişan al ve bırak'};
+function renderSkins(){const list=$('skinlist');list.innerHTML='';skins.forEach((s,i)=>{const el=document.createElement('button');el.className='skin'+(skin===i?' selected':'');el.innerHTML='<span class="orb" style="background:'+s.color+';color:'+s.color+'"></span>'+s.name+'<br><b>'+(unlocked.includes(i)?(skin===i?'SEÇİLİ':'AÇIK'):'🪙 '+s.price)+'</b>';el.onclick=()=>{if(unlocked.includes(i)){skin=i;save();renderSkins();toast(s.name+' seçildi')}else if(coins>=s.price){coins-=s.price;unlocked.push(i);skin=i;save();stats();renderSkins();toast('Görünüm açıldı!')}else toast('Yeterli jeton yok!');};list.appendChild(el)})}
+function showSkins(){$('skins').classList.remove('hidden');renderSkins()}
+$('openSkins').onclick=showSkins;$('overSkins').onclick=showSkins;$('closeSkins').onclick=()=>{$('skins').classList.add('hidden');if(!playing&&!gameOver)$('start').classList.remove('hidden');if(gameOver)$('gameover').classList.remove('hidden')};
+$('sound').onclick=()=>{toast('Sesler sonraki sürümde eklenecek');};
+stats();resize();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
