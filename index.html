@@ -1,86 +1,63 @@
 <!doctype html>
-<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#070b12"><title>Ballstorm — Cyber Brick Breaker</title>
-<style>
-*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#070b12;color:#eaffff;font-family:system-ui,Arial,sans-serif;touch-action:none}#app{height:100dvh;max-width:560px;margin:auto;display:flex;flex-direction:column;background:radial-gradient(ellipse at 50% 0%,#101f2b,#070b12 65%)}header{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:9px 16px;border-bottom:1px solid #1b3740;background:#0a121c}h1{margin:0;font-size:19px;letter-spacing:2px;color:#b7fff4;text-shadow:0 0 13px #00ffd0}.stats{display:flex;gap:17px}.stat{text-align:center;font-size:19px;font-weight:900;font-variant-numeric:tabular-nums}.stat small{display:block;font-size:9px;letter-spacing:1.5px;color:#7f9eaa;font-weight:700;margin-bottom:1px}#stage{flex:1;min-height:0;position:relative}canvas{display:block;width:100%;height:100%;touch-action:none}.footer{height:54px;flex-shrink:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#6f929f;font-size:11px;letter-spacing:.4px;border-top:1px solid #18303a;background:#09111a}.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:#03070ddf;backdrop-filter:blur(5px);z-index:3}.overlay.hide{display:none}.panel{width:100%;max-width:330px;padding:25px 22px;border:1px solid #1d625e;border-radius:14px;text-align:center;background:linear-gradient(150deg,#10242d,#0a111c);box-shadow:0 0 32px #00ffc018}.panel h2{margin:0 0 8px;font-size:28px;letter-spacing:2px;color:#c2fff5;text-shadow:0 0 12px #00ffc0}.panel p{font-size:13px;color:#91abb7;line-height:1.6}button{width:100%;border:1px solid #00f0c0;border-radius:8px;padding:13px 18px;background:#00e5b6;color:#03130f;font-size:14px;font-weight:900;letter-spacing:1px;margin-top:10px}#toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:2;padding:7px 13px;border:1px solid #26535e;background:#0d202a;border-radius:18px;color:#bafff5;font-size:11px;opacity:0;pointer-events:none}#toast.show{opacity:1}
-</style></head><body><div id="app"><header><div><h1>BALLSTORM</h1><div style="font-size:9px;color:#6c909c;letter-spacing:2px">CYBER BRICK BREAKER</div></div><div class="stats"><div class="stat"><small>SKOR</small><span id="score">0</span></div><div class="stat"><small>REKOR</small><span id="best">0</span></div><div class="stat"><small>SEVİYE</small><span id="level">1</span></div></div></header>
-<div id="stage"><canvas id="game"></canvas><div id="toast"></div><div id="start" class="overlay"><div class="panel"><div style="font-size:42px;color:#00ffc8;text-shadow:0 0 20px #00ffc8">◉</div><h2>BALLSTORM</h2><p>Tuğlaları parçala. Her turda bloklar aşağı iner. Nişan almak için alttan yukarı doğru sürükle ve bırak.</p><button id="play">SİSTEMİ BAŞLAT</button></div></div><div id="over" class="overlay hide"><div class="panel"><h2>SİSTEM ÇÖKTÜ</h2><p>Tuğlalar tabana ulaştı.<br>Skorun: <b id="final">0</b></p><button id="again">YENİDEN BAŞLA</button></div></div></div>
-<div class="footer">SÜRÜKLE VE NİŞAN AL&nbsp; • &nbsp;BIRAK VE ATEŞ ET&nbsp; • &nbsp;TOPLARI TOPLA</div></div>
-<script>
-(()=>{'use strict';
-const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d'),$=id=>document.getElementById(id);
-let W=360,H=600,D=1,score=0,best=+(localStorage.getItem('ballstorm-best')||0),level=1,ballCount=1,blocks=[],balls=[],trails=[],particles=[],pickups=[],playing=false,aiming=false,aim={x:180,y:350},base={x:180,y:570},busy=false,nextX=180,launchIndex=0,shake=0,frameNo=0;
-const neon=['#00ffd0','#29b6ff','#a66bff','#68ff5a','#ff4be1'];
-const rnd=(a,b)=>a+Math.random()*(b-a),clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-function resize(){const r=canvas.getBoundingClientRect();D=Math.min(devicePixelRatio||1,2);W=r.width;H=r.height;canvas.width=Math.round(W*D);canvas.height=Math.round(H*D);ctx.setTransform(D,0,0,D,0,0);base={x:nextX,y:H-24};if(!playing)draw()}new ResizeObserver(resize).observe(canvas);
-function hud(){$('score').textContent=score.toLocaleString();$('best').textContent=best.toLocaleString();$('level').textContent=level}
-function toast(t){$('toast').textContent=t;$('toast').classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').classList.remove('show'),1100)}
-function reset(){score=0;level=1;ballCount=1;blocks=[];balls=[];trails=[];particles=[];pickups=[];nextX=W/2;base={x:nextX,y:H-24};busy=false;playing=true;aiming=false;$('start').classList.add('hide');$('over').classList.add('hide');row(true);hud()}
-function row(first=false){
- const cols=Math.max(5,Math.min(8,Math.floor(W/46))),gap=4,pad=7,bw=(W-pad*2-gap*(cols-1))/cols,bh=Math.min(37,bw*.78);
- // Pixel-art motifs: person, tree, maze, alien, diamond, alternating walls.
- const patterns=[
- ['00100','01110','00100','01110','10101'], // tiny person
- ['00100','01110','11111','00100','00100'], // tree
- ['11111','10001','10111','10101','11101'], // maze
- ['01110','11111','10101','11111','01010'], // alien
- ['00100','01110','11111','01110','00100'], // diamond
- ['11011','11011','00000','11011','11011']  // walls
- ];
- const pat=patterns[(level-1)%patterns.length];
- for(let c=0;c<cols;c++){
-  const rowIndex=blocks.length?Math.floor(Math.random()*5):0;
-  // Shapes are repeated vertically as a recognizable little pixel-art formation.
-  let filled=first?((c===1||c===2||c===cols-2||c===cols-3)):pat[Math.floor((level+rowIndex)%pat.length)][c%5]==='1';
-  if(!filled&&Math.random()>.16)continue;
-  if(Math.random()<.12)continue;
-  let hp=first?1:Math.max(1,Math.floor(rnd(1,level*1.25+2)));
-  blocks.push({x:pad+c*(bw+gap),y:18,w:bw,h:bh,hp,max:hp,color:Math.floor(rnd(0,neon.length)),pickup:Math.random()<.12?'ball':''});
- }
- if(!blocks.length)row(true)
-}
-function lose(){playing=false;busy=false;best=Math.max(best,score);localStorage.setItem('ballstorm-best',best);hud();$('final').textContent=score.toLocaleString();$('over').classList.remove('hide')}
-function burst(x,y,col,n=8){for(let i=0;i<n;i++)particles.push({x,y,vx:rnd(-2.5,2.5),vy:rnd(-3,2),life:30,col})}
-function hit(b,x,y,r){const px=clamp(x,b.x,b.x+b.w),py=clamp(y,b.y,b.y+b.h);return (x-px)**2+(y-py)**2<r*r}
-function fire(){if(!playing||busy||!aiming)return;let dx=aim.x-base.x,dy=aim.y-base.y,L=Math.hypot(dx,dy);if(L<18||dy> -10){aiming=false;return}dx/=L;dy/=L;if(dy>-.18)dy=-.18;L=Math.hypot(dx,dy);dx/=L;dy/=L;busy=true;launchIndex=0;for(let i=0;i<ballCount;i++)balls.push({x:base.x,y:base.y,vx:dx*5.0,vy:dy*5.0,delay:i*2.3,r:3.6});}
-function update(){
- frameNo++;
- if(playing){
-  if(shake)shake--;
-  for(let i=balls.length-1;i>=0;i--){let b=balls[i];if(b.delay>0){b.delay--;continue}b.x+=b.vx;b.y+=b.vy;
-   trails.push({x:b.x,y:b.y,life:12,col:'#58ffe3'});
-   if(b.x<b.r){b.x=b.r;b.vx=Math.abs(b.vx)}if(b.x>W-b.r){b.x=W-b.r;b.vx=-Math.abs(b.vx)}if(b.y<b.r){b.y=b.r;b.vy=Math.abs(b.vy)}
-   if(b.y>=base.y){launchIndex++;nextX=launchIndex===1?b.x:nextX*.7+b.x*.3;balls.splice(i,1);continue}
-   for(let j=blocks.length-1;j>=0;j--){const q=blocks[j];if(hit(q,b.x,b.y,b.r)){const ox=b.x-b.vx,oy=b.y-b.vy;if(ox<q.x||ox>q.x+q.w)b.vx*=-1;else b.vy*=-1;q.hp--;score++;shake=2;burst(b.x,b.y,neon[q.color],3);if(q.hp<=0){score+=q.max;burst(q.x+q.w/2,q.y+q.h/2,neon[q.color],11);if(q.pickup)pickups.push({x:q.x+q.w/2,y:q.y+q.h/2});blocks.splice(j,1)}break}}
-  }
-  for(let i=pickups.length-1;i>=0;i--){const p=pickups[i];p.y+=1.4;if(p.y>=base.y-3){ballCount++;pickups.splice(i,1);toast('+1 TOP');hud()}else if(p.y>H)pickups.splice(i,1)}
-  for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.04;p.life--;if(p.life<=0)particles.splice(i,1)}
-  if(busy&&balls.length===0){busy=false;base={x:clamp(nextX,9,W-9),y:H-24};blocks.forEach(b=>b.y+=b.h+4);if(blocks.some(b=>b.y+b.h>=base.y-7)){lose()}else{level++;row();hud();if(blocks.some(b=>b.y+b.h>=base.y-7))lose();else toast('DALGA '+level)}}
- }
- trails.forEach(t=>t.life--);trails=trails.filter(t=>t.life>0);
-}
-function roundRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
-function draw(){
- ctx.clearRect(0,0,W,H);ctx.fillStyle='#070d14';ctx.fillRect(0,0,W,H);
- // cyberpunk grid and ambient points
- ctx.strokeStyle='#0d3737';ctx.lineWidth=.6;for(let x=0;x<W;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
- for(let i=0;i<18;i++){const x=(i*83+13)%W,y=(i*131+frameNo*.13)%(H-50);ctx.fillStyle='#58ffe311';ctx.fillRect(x,y,2,2)}
- ctx.save();if(shake)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));
- // trail particles first
- trails.forEach(t=>{ctx.globalAlpha=t.life/12*.42;ctx.fillStyle=t.col;ctx.shadowColor=t.col;ctx.shadowBlur=8;ctx.beginPath();ctx.arc(t.x,t.y,2.5*t.life/12,0,Math.PI*2);ctx.fill()});ctx.globalAlpha=1;ctx.shadowBlur=0;
- blocks.forEach(q=>{let col=neon[q.color];ctx.shadowColor=col;ctx.shadowBlur=12;let g=ctx.createLinearGradient(q.x,q.y,q.x+q.w,q.y+q.h);g.addColorStop(0,col);g.addColorStop(1,'#122833');ctx.fillStyle=g;roundRect(q.x,q.y,q.w,q.h,4);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=col;ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#f0ffff';ctx.font='900 '+Math.min(17,q.h*.5)+'px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor=col;ctx.shadowBlur=5;ctx.fillText(q.hp,q.x+q.w/2,q.y+q.h/2+1);ctx.shadowBlur=0;if(q.pickup){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(q.x+q.w-4,q.y+4,2.5,0,Math.PI*2);ctx.fill()}});
- pickups.forEach(p=>{ctx.fillStyle='#00ffd0';ctx.shadowColor='#00ffd0';ctx.shadowBlur=18;ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#05201c';ctx.font='bold 9px Arial';ctx.textAlign='center';ctx.fillText('+',p.x,p.y+3)});
- particles.forEach(p=>{ctx.globalAlpha=p.life/30;ctx.fillStyle=p.col;ctx.shadowColor=p.col;ctx.shadowBlur=8;ctx.fillRect(p.x,p.y,3,3)});ctx.globalAlpha=1;ctx.shadowBlur=0;
- balls.forEach(b=>{ctx.fillStyle='#f6ffff';ctx.shadowColor='#62ffe9';ctx.shadowBlur=13;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill()});ctx.shadowBlur=0;
- base={x:clamp(base.x,9,W-9),y:H-24};
- if(aiming&&playing&&!busy){let dx=aim.x-base.x,dy=aim.y-base.y,L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;if(dy>-.15)dy=-.15;ctx.setLineDash([4,6]);ctx.strokeStyle='#65ffe6';ctx.globalAlpha=.8;ctx.beginPath();ctx.moveTo(base.x,base.y);ctx.lineTo(base.x+dx*145,base.y+dy*145);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1}
- ctx.fillStyle='#dffffb';ctx.shadowColor='#00ffd0';ctx.shadowBlur=14;ctx.beginPath();ctx.arc(base.x,base.y,5,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.restore();
-}
-function loop(){update();draw();requestAnimationFrame(loop)}
-function pos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
-canvas.addEventListener('pointerdown',e=>{if(!playing||busy)return;aiming=true;aim=pos(e);canvas.setPointerCapture(e.pointerId)});
-canvas.addEventListener('pointermove',e=>{if(aiming){aim=pos(e);aim.y=Math.min(aim.y,base.y-14)}});
-canvas.addEventListener('pointerup',e=>{if(aiming){aim=pos(e);aim.y=Math.min(aim.y,base.y-14);fire()}});
-canvas.addEventListener('pointercancel',()=>aiming=false);
-$('play').onclick=reset;$('again').onclick=reset;hud();resize();requestAnimationFrame(loop);
-})();
-</script></body></html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#0A0A12">
+  <meta name="description" content="Ballstorm — neon piksel sanatlı, tarayıcı tabanlı tuğla kırma oyunu.">
+  <title>Ballstorm — Neon Brick Breaker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Ballstorm ana ekran"><span class="brand-mark">✦</span><span>BALLSTORM</span></a>
+      <div class="stats">
+        <div class="stat"><span class="stat-label">SKOR</span><strong id="score">0</strong></div>
+        <div class="stat"><span class="stat-label">REKOR</span><strong id="highScore">0</strong></div>
+        <div class="stat"><span class="stat-label">STAGE</span><strong id="stage">1</strong></div>
+        <div class="stat"><span class="stat-label">TOP</span><strong id="ballCount">50</strong></div>
+      </div>
+      <div class="actions">
+        <button id="soundBtn" class="icon-btn" type="button" aria-label="Sesi aç veya kapat" title="Ses aç/kapat">♫ <span id="soundState">SES AÇIK</span></button>
+        <button id="speedBtn" class="icon-btn" type="button" aria-pressed="false">1× SPEED</button>
+      </div>
+    </header>
+
+    <section class="game-shell" aria-label="Ballstorm oyun alanı">
+      <div class="canvas-wrap">
+        <canvas id="game" aria-label="Topu nişan alıp bırakınca fırlat."></canvas>
+        <div id="startOverlay" class="overlay">
+          <div class="overlay-card">
+            <div class="eyebrow">NEON PIXEL BREAKER</div>
+            <h1>BALL<span>STORM</span></h1>
+            <p>50 topu sırayla fırlat. Piksel desenlerini parçala. Taban çizgisine dikkat et.</p>
+            <button id="startBtn" class="primary-btn" type="button">OYUNA BAŞLA <span>↗</span></button>
+            <small>Fareyle veya parmağınla yukarı doğru nişan al.</small>
+          </div>
+        </div>
+        <div id="gameOverOverlay" class="overlay hidden">
+          <div class="overlay-card">
+            <div class="eyebrow danger">SİNYAL KESİLDİ</div>
+            <h2>GAME OVER</h2>
+            <p>Bu turda <strong id="finalScore">0</strong> puan topladın.</p>
+            <p class="record-line">En iyi skor: <strong id="finalBest">0</strong></p>
+            <button id="restartBtn" class="primary-btn" type="button">YENİDEN OYNA <span>↻</span></button>
+          </div>
+        </div>
+        <div id="toast" class="toast" aria-live="polite"></div>
+      </div>
+      <footer class="game-footer">
+        <span class="legend"><i class="dot cyan"></i> TOPLAR</span>
+        <span class="legend"><i class="dot green"></i> 1–10 HP</span>
+        <span class="legend"><i class="dot blue"></i> 11–30 HP</span>
+        <span class="legend"><i class="dot purple"></i> 31–60 HP</span>
+        <span class="legend"><i class="dot red"></i> 60+ HP</span>
+        <span id="status" class="status">Başlamak için oyuna bas.</span>
+      </footer>
+    </section>
+    <p class="hint">NİŞAN: Topu göndermek istediğin yönün tersine sürükle ve bırak. Duvar sekmeleri kesikli çizgiyle tahmin edilir.</p>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
